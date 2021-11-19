@@ -1,0 +1,983 @@
+DOCUMENTATION = '''
+module: graylog_users
+short_description: Communicate with the Graylog API to manage users
+description:
+    - The Graylog user module manages Graylog users.
+version_added: "2.9"
+author: "Whitney Champion (@shortstack)"
+options:
+  endpoint:
+    description:
+      - Graylog endpoint. (i.e. graylog.mydomain.com:9000).
+    required: false
+    type: str
+  graylog_user:
+    description:
+      - Graylog privileged user username, used to auth with Graylog API.
+    required: false
+    type: str
+  graylog_password:
+    description:
+      - Graylog privileged user password, used to auth with Graylog API.
+    required: false
+    type: str
+  allow_http:
+    description:
+      - Allow non HTTPS connexion
+    required: false
+    default: false
+    type: bool
+  validate_certs:
+    description:
+      - Allow untrusted certificate
+    required: false
+    default: false
+    type: bool          
+  action:
+    description:
+      - Action to take against user API.
+    required: false
+    default: list
+    choices: [ create, update, delete, list ]
+    type: str
+  username:
+    description:
+      - Username.
+    required: false
+    type: str
+  password:
+    description:
+      - Password.
+    required: false
+    type: str
+  full_name:
+    description:
+      - Display name.
+    required: false
+    type: str
+  email:
+    description:
+      - Email.
+    required: false
+    type: str
+  roles:
+    description:
+      - List of role names to add the user to.
+    required: false
+    type: list
+  permissions:
+    description:
+      - List of permission names to add the user to.
+    required: false
+    type: list
+  timezone:
+    description:
+      - Timezone.
+    required: false
+    default: 'UTC'
+    type: str
+'''
+
+EXAMPLES = '''
+# List users
+- graylog_users:
+    endpoint: "graylog.mydomain.com"
+    graylog_user: "username"
+    graylog_password: "password"
+
+# Create user
+- graylog_users:
+    action: create
+    endpoint: "graylog.mydomain.com"
+    graylog_user: "username"
+    graylog_password: "password"
+    username: "whitney"
+    full_name: "Whitney"
+    email: "whitney@unicorns.lol"
+    password: "cookiesaredelicious"
+    roles:
+      - "analysts"
+    permissions:
+      - "*"
+
+# Create user with role(s)
+- graylog_users:
+    action: create
+    endpoint: "graylog.mydomain.com"
+    graylog_user: "username"
+    graylog_password: "password"
+    username: "whitney"
+    full_name: "Whitney"
+    email: "whitney@unicorns.lol"
+    password: "cookiesaredelicious"
+    roles:
+      - "analysts"
+
+# Create multiple users with admin roles
+- graylog_users:
+    action: create
+    endpoint: "graylog.mydomain.com"
+    graylog_user: "username"
+    graylog_password: "password"
+    username: "{{ item.username }}"
+    full_name: "{{ item.full_name }}"
+    email: "{{ item.email }}"
+    password: "{{ item.password }}"
+    roles:
+      - "admins"
+  with_items:
+    - { username: "alice", full_name: "Alice", email: "alice@aolcom", password: "ilovebob111" }
+    - { username: "bob", full_name: "Bob", email: "bob@aolcom", password: "ilovealice111" }
+
+# Update user's email address
+- graylog_users:
+    action: update
+    endpoint: "graylog.mydomain.com"
+    graylog_user: "username"
+    graylog_password: "password"
+    username: "whitney"
+    email: "whitney@ihateunicorns.lol"
+
+# Delete user
+- graylog_users:
+    action: delete
+    endpoint: "graylog.mydomain.com"
+    graylog_user: "username"
+    graylog_password: "password"
+    username: "whitney"
+'''
+
+RETURN = '''
+json:
+  description: The JSON response from the Graylog API
+  returned: always
+  type: complex
+  contains:
+      username:
+          description: Username.
+          returned: success
+          type: str
+          sample: 'john'
+      id:
+          description: User ID.
+          returned: success
+          type: str
+          sample: '4bc73d5108e33b4810f3eab0'
+      email:
+          description: User email.
+          returned: success
+          type: str
+          sample: 'john@domain.com'
+      full_name:
+          description: Full name of the user.
+          returned: success
+          type: str
+          sample: 'John Smith'
+      last_activity:
+          description: Last user activity.
+          returned: success
+          type: str
+          sample: '2019-04-21T23:16:53.500+0000'
+      external:
+          description: Whether or not the user was created from an external authentication source (such as LDAP).
+          returned: success
+          type: bool
+          sample: true
+      session_active:
+          description: Whether or not the user's session is active.
+          returned: success
+          type: bool
+          sample: true
+      session_timeout_ms:
+          description: Session automatically ends after this amount of time.
+          returned: success
+          type: int
+          sample: 3600000
+      startpage:
+          description: User's start page.
+          returned: success
+          type: dict
+          sample: { "id": "5b05eea33f5e865e57babfae", "type": "dashboard" }
+      preferences:
+          description: User's preferences.
+          returned: success
+          type: dict
+          sample: { "enableSmartSearch": true }
+      timezone:
+          description: User's timezone.
+          returned: success
+          type: str
+          sample: 'America/Chicago'
+      permissions:
+          description: User permissions (dashboards, streams, collectors, etc).
+          returned: success
+          type: list
+          sample: [ "dashboards:read:4c58eef77ec84145c3a2d9f3" ]
+      roles:
+          description: User roles.
+          returned: success
+          type: list
+          sample: [ "analyst", "Administrator" ]
+      read_only:
+          description: Whether or not the user is a read-only user.
+          returned: success
+          type: bool
+          sample: false
+msg:
+  description: The HTTP message from the request
+  returned: always
+  type: str
+  sample: OK (unknown bytes)
+status:
+  description: The HTTP status code from the request
+  returned: always
+  type: int
+  sample: 200
+url:
+  description: The actual URL used for the request
+  returned: always
+  type: str
+  sample: https://www.ansible.com/
+'''
+
+ANSIBLE_METADATA = {'metadata_version': '1.1',
+                    'status': ['preview'],
+                    'supported_by': 'community'}
+
+DOCUMENTATION = '''
+module: graylog_inputs
+short_description: Manage Graylog inputs
+description:
+    - The Graylog inputs module allows configuration of inputs nodes.
+version_added: "2.9"
+author: "Matthieu SIMON"
+options:
+  endpoint:
+    description:
+      - Graylog endoint. (i.e. graylog.mydomain.com).
+    required: false
+    type: str
+  graylog_user:
+    description:
+      - Graylog privileged user username.
+    required: false
+    type: str
+  graylog_password:
+    description:
+      - Graylog privileged user password.
+    required: false
+    type: str
+  allow_http:
+    description:
+      - Allow non HTTPS connexion
+    required: false
+    default: false
+    type: bool
+  validate_certs:
+    description:
+      - Allow untrusted certificate
+    required: false
+    default: false
+    type: bool
+  action:
+    description:
+      - Action to take against system/input API.
+      - Warning : when update, all settings with default value set in this Ansible module (like bind_address, port ...) will replace existing values
+        You must explicitly set these values if they differ from those by default
+    required: true
+    default: create
+    choices: [ create, update ]
+    type: str
+  input_type:
+    description:
+      - Input type (not all are implemented at this time)
+    required: true
+    default: UDP
+    choices: [ 'UDP', 'TCP', 'HTTP' ]
+    type: str
+  title:
+    description:
+      - Entitled of the input
+      - Required with actions create, update and delete
+    required: true
+    type: str
+  input_id:
+    description:
+      - ID of input to update
+    required: false
+    type: str
+  global_input:
+    description:
+      - Input is present on all Graylog nodes
+    required: false
+    default: true
+    type: bool
+  node:
+    description:
+      - Node name if input is not global
+    required: false
+    type: str
+  bind_address:
+    description:
+      - Address to listen on
+    required: false
+    default: "0.0.0.0"
+    type: str
+  port:
+    description:
+      - Port to listen on
+    required: true
+    default: 12201
+    type: int
+   number_worker_threads:
+    description:
+      - Number of worker threads processing network connections for this input.
+    required: false
+    default: 2
+    type: int
+  override_source:
+    description:
+      - The source is a hostname derived from the received packet by default. Set this if you want to override it with a custom string.
+    required: false
+    type: str
+  recv_buffer_size:
+    description:
+      - The size in bytes of the recvBufferSize for network connections to this input.
+    required: false
+    default: 1048576
+    type: int
+  tcp_keepalive:
+    description:
+      - Enable TCP keepalive packets (TCP & HTTP only)
+    required: false
+    default: false
+    type: bool
+  tls_enable:
+    description:
+      - Accept TLS connections (TCP & HTTP only)
+    required: false
+    default: false
+    type: bool
+  tls_cert_file:
+    description:
+      - Path to the TLS certificate file (TCP & HTTP only)
+    required: false
+    type: str
+  tls_key_file:
+    description:
+      - Path to the TLS private key file (TCP & HTTP only)
+    required: false
+    type: str
+  tls_key_password:
+    description:
+      - The password for the encrypted key file. (TCP & HTTP only)
+    required: false
+    type: str
+  tls_client_auth:
+    description:
+      - Whether clients need to authenticate themselves in a TLS connection (TCP & HTTP only)
+    required: false
+    default: disabled
+    choices: [ 'disabled', 'optional', 'required' ]
+  tls_client_auth_cert_file:
+    description:
+      - TLS Client Auth Trusted Certs (File or Directory) (TCP & HTTP only)
+    required: false
+    type: str
+  use_null_delimiter:
+    description:
+      - Use null byte as frame delimiter ? Otherwise newline delimiter is used. (TCP Only)
+    required: false
+    default: false
+    type: bool
+  decompress_size_limit:
+    description:
+      - The maximum number of bytes after decompression.
+    required: false
+    default: 8388608
+    type: int
+  enable_cors:
+    description:
+      - Input sends CORS headers to satisfy browser security policies (HTTP Only)
+    required: false
+    default: true
+    type: bool
+  idle_writer_timeout:
+    description:
+      - The server closes the connection after the given time in seconds after the last client write request. (use 0 to disable) (HTTP Only)
+    required: false
+    default: 60
+    type: int
+  max_chunk_size:
+    description:
+      - The maximum HTTP chunk size in bytes (e. g. length of HTTP request body) (HTTP Only)
+    required: false
+    default: 65536
+    type: int
+  max_message_size:
+    description:
+      - The maximum length of a message. (TCP Only)
+    required: false
+    default: 2097152
+    type: int
+'''
+
+EXAMPLES = '''
+    - name: Create GELF HTTP input
+      graylog_input_gelf:
+        endpoint: "{{ graylog_endpoint }}"
+        graylog_user: "{{ graylog_user }}"
+        graylog_password: "{{ graylog_password }}"
+        allow_http: "true"
+        validate_certs: "false"
+        action: "create"
+        input_type: "HTTP"
+        title: "Test input GELF HTTP"
+        global_input: "true"
+        bind_address: "0.0.0.0"
+'''
+
+
+DOCUMENTATION = '''
+module: graylog_roles
+short_description: Communicate with the Graylog API to manage roles
+description:
+    - The Graylog roles module manages Graylog roles.
+version_added: "2.9"
+author: "Whitney Champion (@shortstack)"
+options:
+  endpoint:
+    description:
+      - Graylog endoint. (i.e. graylog.mydomain.com).
+    required: false
+    type: str
+  graylog_user:
+    description:
+      - Graylog privileged user username.
+    required: false
+    type: str
+  graylog_password:
+    description:
+      - Graylog privileged user password.
+    required: false
+    type: str
+  allow_http:
+    description:
+      - Allow non HTTPS connexion
+    required: false
+    default: false
+    type: bool
+  validate_certs:
+    description:
+      - Allow untrusted certificate
+    required: false
+    default: false
+    type: bool          
+  state:
+    description:
+      - state to take against role API.
+    required: false
+    default: list
+    choices: [ create, update, delete, list ]
+    type: str
+  name:
+    description:
+      - Role name.
+    required: false
+    type: str
+  description:
+    description:
+      - Role description.
+    required: false
+    type: str
+  permissions:
+    description:
+      - Permissions list for role.
+    required: false
+    type: list
+  read_only:
+    description:
+      - Read only, true or false.
+    required: false
+    default: "false"
+    type: str
+'''
+
+EXAMPLES = '''
+# List roles
+- graylog_roles:
+    endpoint: "graylog.mydomain.com"
+    graylog_user: "username"
+    graylog_password: "password"
+
+# Create role
+- graylog_roles:
+    state: create
+    endpoint: "graylog.mydomain.com"
+    graylog_user: "username"
+    graylog_password: "password"
+    name: "analysts"
+    description: "Analyst role"
+    permissions:
+      - "streams:read"
+      - "dashboards:read"
+    read_only: "true"
+
+# Create admin role
+- graylog_roles:
+    state: create
+    endpoint: "graylog.mydomain.com"
+    graylog_user: "username"
+    graylog_password: "password"
+    name: "admins"
+    description: "Admin role"
+    permissions:
+      - "*"
+    read_only: "false"
+
+# Delete role
+- graylog_roles:
+    state: delete
+    endpoint: "graylog.mydomain.com"
+    graylog_user: "username"
+    graylog_password: "password"
+    name: "admins"
+'''
+
+RETURN = '''
+json:
+  description: The JSON response from the Graylog API
+  returned: always
+  type: complex
+  contains:
+      name:
+          description: Role name.
+          returned: success
+          type: str
+          sample: 'Administrators'
+      description:
+          description: Role description.
+          returned: success
+          type: str
+          sample: 'Administrators group'
+      permissions:
+          description: Role permissions (dashboards, streams, collectors, etc).
+          returned: success
+          type: list
+          sample: [ "dashboards:read:4c58eef77ec84145c3a2d9f3", "sidecars:update" ]
+      read_only:
+          description: Whether or not the role is a read-only role.
+          returned: success
+          type: bool
+          sample: false
+status:
+  description: The HTTP status code from the request
+  returned: always
+  type: int
+  sample: 200
+url:
+  description: The actual URL used for the request
+  returned: always
+  type: str
+  sample: https://www.ansible.com/
+'''
+
+
+ANSIBLE_METADATA = {'metadata_version': '1.1',
+                    'status': ['preview'],
+                    'supported_by': 'community'}
+
+DOCUMENTATION = '''
+module: graylog_inputs
+short_description: Manage Graylog static field
+description:
+    - The Graylog inputs module allows configuration of inputs static fields.
+version_added: "2.9"
+author: "Szymon Maslowski on top of Matthieu SIMON work"
+options:
+  endpoint:
+    description:
+      - Graylog endoint. (i.e. graylog.mydomain.com).
+    required: false
+    type: str
+  graylog_user:
+    description:
+      - Graylog privileged user username.
+    required: false
+    type: str
+  graylog_password:
+    description:
+      - Graylog privileged user password.
+    required: false
+    type: str
+  allow_http:
+    description:
+      - Allow non HTTPS connexion
+    required: false
+    default: false
+    type: bool
+  validate_certs:
+    description:
+      - Allow untrusted certificate
+    required: false
+    default: false
+    type: bool
+  state:
+    description:
+      - desired state of the static fields (either present or absent)
+    required: false
+    default: present
+    type: str
+  input_id:
+    description:
+      - ID of input to update
+    required: true
+    type: str
+  static_fields:
+    description:
+      - keys and values of static fields
+    required: false
+    type: dict
+
+'''
+
+EXAMPLES = '''
+    - name: Add
+      graylog_input_gelf:
+        endpoint: "{{ graylog_endpoint }}"
+        graylog_user: "{{ graylog_user }}"
+        graylog_password: "{{ graylog_password }}"
+        input_id: "{{ app_input_id }}"
+        static_fields:
+          app_name: "{{ application_name }}"
+          env: "{{ env }}"
+'''
+
+
+ANSIBLE_METADATA = {'metadata_version': '1.1',
+                    'status': ['preview'],
+                    'supported_by': 'community'}
+
+DOCUMENTATION = '''
+module: graylog_streams
+short_description: Communicate with the Graylog API to manage streams
+description:
+    - The Graylog streams module manages Graylog streams.
+version_added: "2.9"
+author: "Whitney Champion (@shortstack)"
+options:
+  endpoint:
+    description:
+      - Graylog endoint. (i.e. graylog.mydomain.com).
+    required: false
+    type: str
+  graylog_user:
+    description:
+      - Graylog privileged user username.
+    required: false
+    type: str
+  graylog_password:
+    description:
+      - Graylog privileged user password.
+    required: false
+    type: str
+  allow_http:
+    description:
+      - Allow non HTTPS connexion
+    required: false
+    default: false
+    type: bool    
+  validate_certs:
+    description:
+      - Allow untrusted certificate
+    required: false
+    default: false
+    type: bool      
+  action:
+    description:
+      - Action to take against stream API.
+    required: false
+    default: list
+    choices: [ create, create_rule, start, pause, update, update_rule, delete, delete_rule, list, query_streams ]
+    type: str
+  title:
+    description:
+      - Stream title.
+    required: false
+    type: str
+  description:
+    description:
+      - Stream description.
+    required: false
+    type: str
+  stream_id:
+    description:
+      - Stream ID.
+    required: false
+    type: str
+  rule_id:
+    description:
+      - Rule ID.
+    required: false
+    type: str
+  index_set_id:
+    description:
+      - Index set ID.
+    required: false
+    type: str
+  matching_type:
+    description:
+      - Matching type for the stream rules.
+    required: false
+    type: str
+  remove_matches_from_default_stream:
+    description:
+      - Remove matches from default stream, true or false.
+    required: false
+    default: False
+    type: bool
+  stream_name:
+    description:
+      - Stream name to use with the query_streams action.
+    required: false
+    type: str
+  field:
+    description:
+      - Field name for the stream rule to check.
+    required: false
+    type: str
+  type:
+    description:
+      - Rule type for the stream rule, 1-7.
+    required: false
+    default: 1
+    type: int
+  value:
+    description:
+      - Value to check rule against.
+    required: false
+    type: str
+  inverted:
+    description:
+      - Invert rule (must not match value).
+    required: false
+    default: False
+    type: bool
+  rules:
+    description:
+      - List of rules associated with a stream.
+    required: false
+    type: list
+'''
+
+EXAMPLES = '''
+# List streams
+- graylog_streams:
+    endpoint: "graylog.mydomain.com"
+    graylog_user: "username"
+    graylog_password: "password"
+
+# Get stream from stream name query_streams
+- graylog_streams:
+    action: query_streams
+    endpoint: "graylog.mydomain.com"
+    graylog_user: "username"
+    graylog_password: "password"
+    stream_name: "test_stream"
+  register: stream
+
+# List single stream by ID
+- graylog_streams:
+    endpoint: "graylog.mydomain.com"
+    graylog_user: "username"
+    graylog_password: "password"
+    stream_id: "{{ stream.json.id }}"
+
+# Create stream
+- graylog_streams:
+    action: create
+    endpoint: "graylog.mydomain.com"
+    graylog_user: "username"
+    graylog_password: "password"
+    title: "Client XYZ"
+    description: "Windows and IIS logs"
+    matching_type: "AND"
+    remove_matches_from_default_stream: False
+    rules:
+      - '{"field":"message", "type":"6", "value":"test", "inverted":true, "description":"testrule"}'
+
+# Update stream
+- graylog_streams:
+    action: update
+    endpoint: "graylog.mydomain.com"
+    graylog_user: "username"
+    graylog_password: "password"
+    stream_id: "{{ stream.json.id }}"
+    remove_matches_from_default_stream: True
+
+# Create stream rule
+- graylog_streams:
+    action: create_rule
+    endpoint: "graylog.mydomain.com"
+    graylog_user: "username"
+    graylog_password: "password"
+    stream_id: "{{ stream.json.id }}"
+    description: "Windows Security Logs"
+    field: "winlogbeat_log_name"
+    type: 1
+    value: "Security"
+    inverted: False
+
+# Start stream
+- graylog_streams:
+    action: start
+    endpoint: "graylog.mydomain.com"
+    graylog_user: "username"
+    graylog_password: "password"
+    stream_id: "{{ stream.json.id }}"
+
+# Pause stream
+- graylog_streams:
+    action: pause
+    endpoint: "graylog.mydomain.com"
+    graylog_user: "username"
+    graylog_password: "password"
+    stream_id: "{{ stream.json.id }}"
+
+# Update stream rule
+- graylog_streams:
+    action: update_rule
+    endpoint: "graylog.mydomain.com"
+    graylog_user: "username"
+    graylog_password: "password"
+    stream_id: "{{ stream.json.id }}"
+    rule_id: "{{ rule.json.id }}"
+    description: "Windows Security and Application Logs"
+
+# Delete stream rule
+- graylog_streams:
+    action: delete_rule
+    endpoint: "graylog.mydomain.com"
+    graylog_user: "username"
+    graylog_password: "password"
+    stream_id: "{{ stream.json.id }}"
+    rule_id: "{{ rule.json.id }}"
+
+# Delete stream
+- graylog_streams:
+    action: delete
+    endpoint: "graylog.mydomain.com"
+    graylog_user: "username"
+    graylog_password: "password"
+    stream_id: "{{ stream.json.id }}"
+'''
+
+RETURN = '''
+json:
+  description: The JSON response from the Graylog API
+  returned: always
+  type: complex
+  contains:
+    title:
+      description: Stream title.
+      returned: success
+      type: str
+      sample: 'Windows Logs'
+    alert_conditions:
+      description: Alert conditions.
+      returned: success
+      type: dict
+      sample: |
+        [
+            {
+                "created_at": "2018-10-18T18:40:21.582+0000",
+                "creator_user_id": "admin",
+                "id": "cc43d4e7-e7b2-4abc-7c44-4b29cadaf364",
+                "parameters": {
+                    "backlog": 1,
+                    "grace": 0,
+                    "repeat_notifications": true,
+                    "threshold": 0,
+                    "threshold_type": "MORE",
+                    "time": 1
+                },
+                "title": "Failed Logon",
+                "type": "message_count"
+            }
+        ]
+    alert_receivers:
+        description: Alert receivers.
+        returned: success
+        type: dict
+        sample: '{ "emails": [], "users": [] }'
+    content_pack:
+        description: Content pack.
+        returned: success
+        type: str
+        sample: null
+    created_at:
+        description: Stream creation time.
+        returned: success
+        type: str
+        sample: "2018-10-17T15:29:20.735Z"
+    creator_user_id:
+        description: Stream creator.
+        returned: success
+        type: str
+        sample: "admin"
+    description:
+        description: Stream description.
+        returned: success
+        type: str
+        sample: "Stream for Windows logs"
+    disabled:
+        description: Whether or not the stream is enabled.
+        returned: success
+        type: bool
+        sample: false
+    id:
+        description: Stream ID.
+        returned: success
+        type: str
+        sample: "5bc7666089675c7f7d7f08d7"
+    index_set_id:
+        description: Index set ID associated with the stream.
+        returned: success
+        type: str
+        sample: "4bc7444089575c7f7d7f08d7"
+    is_default:
+        description: Whether or not it is the default stream.
+        returned: success
+        type: bool
+        sample: false
+    matching_type:
+        description: Stream rule matching type.
+        returned: success
+        type: str
+        sample: "AND"
+    outputs:
+        description: Stream outputs.
+        returned: success
+        type: dict
+        sample: []
+    remove_matches_from_default_stream:
+        description: Whether or messages are removed from the default stream.
+        returned: success
+        type: bool
+        sample: false
+    rules:
+        description: Rules associated with the stream.
+        returned: success
+        type: dict
+        sample: []
+status:
+  description: The HTTP status code from the request
+  returned: always
+  type: int
+  sample: 200
+url:
+  description: The actual URL used for the request
+  returned: always
+  type: str
+  sample: https://www.ansible.com/
+'''

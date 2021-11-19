@@ -1,0 +1,85 @@
+---
+# tasks file for graylog-for-app
+
+- name: App has no graylog setting
+  meta: end_play
+  when: graylog_settings is undefined
+
+- name: Create log input
+  graylog_input_gelf:
+    endpoint: "https://{{ graylog_lb }}"
+    graylog_user: "{{ graylog_admin }}"
+    graylog_password: "{{ graylog_pwd }}"
+    state: present
+    input_type: UDP
+    title: "[{{env | upper }}] {{ application_name }} -- {{ item.input_name }}"
+    global_input: "true"
+    bind_address: "0.0.0.0"
+    port: "{{ item.input_port }}"
+  with_items: "{{ graylog_settings }}"
+  loop_control:
+    label: "[{{env | upper }}] {{ application_name }} -- {{ item.input_name }}"
+  register: "input_data"
+  run_once: True
+
+- name: Set static fields
+  graylog_static_field:
+    endpoint: "https://{{ graylog_lb }}"
+    graylog_user: "{{ graylog_admin }}"
+    graylog_password: "{{ graylog_pwd }}"
+    state: present
+    input_id: "{{ item.invocation.module_args.input_id }}"
+    static_fields:
+      app_name: "{{ application_name }}"
+      env: "{{ env }}"
+  with_items: "{{ input_data.results }}"
+  loop_control:
+    label: "{{ item.invocation.module_args.title }}"
+  run_once: True
+
+- name: Create stream
+  graylog_streams:
+    state: present
+    endpoint: "https://{{ graylog_lb }}"
+    graylog_user: "{{ graylog_admin }}"
+    graylog_password: "{{ graylog_pwd }}"
+    title: "{{ env }} {{ application_name }} all logs stream"
+    description: "Stream containing all logs from all inputs"
+    matching_type: "AND"
+    remove_matches_from_default_stream: False
+    rules:
+      - {
+        "field": "app_name",
+        "type": 1,  # match exactly
+        "value": "{{ application_name }}",
+        "inverted": false,
+        "description": "Regards app"
+        }
+      - {
+        "field": "env",
+        "type": 1,  # match exactly
+        "value": "{{ env }}",
+        "inverted": false,
+        "description": "Environment"
+        }
+  register: stream_create_result
+  run_once: True
+
+- name: "Helpful print"
+  debug:
+    msg: "Stream adress: {{ stream_create_result.human_url }}"
+  run_once: True
+
+- name: "Stream reader permissions"
+  graylog_roles:
+    state: present
+    endpoint: "https://{{ graylog_lb }}"
+    graylog_user: "{{ graylog_admin }}"
+    graylog_password: "{{ graylog_pwd }}"
+    name: "Read only"
+    description: "Read only role, for everyone to see all streams"
+    permissions:
+      - "streams:read"
+      - "dashboards:read"
+    read_only: "true"
+  run_once: True

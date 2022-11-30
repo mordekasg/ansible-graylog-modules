@@ -145,6 +145,10 @@ def query_streams(module, base_url, headers, stream_name):
 
 def default_index_set(module, base_url, headers):
 
+    if module.params['index_set_id'] is not None:
+        default_index_set_id = module.params['index_set_id']
+        return default_index_set_id
+
     url = base_url + "/api/system/indices/index_sets?skip=0&limit=0&stats=false"
 
     response, info = fetch_url(module=module, url=url, headers=json.loads(headers), method='GET')
@@ -160,7 +164,13 @@ def default_index_set(module, base_url, headers):
 
     default_index_set_id = ""
     if indices is not None:
-        default_index_set_id = indices['index_sets'][0]['id']
+        if module.params['index_set_title'] is not None:
+            for index in indices['index_sets']:
+                if index['title'] == module.params['index_set_title']:
+                    default_index_set_id = index['id']
+                    break
+        else:
+            default_index_set_id = indices['index_sets'][0]['id']
 
     return default_index_set_id
 
@@ -181,6 +191,7 @@ def main():
             type=dict(type='int', default=1),
             value=dict(type='str'),
             index_set_id=dict(type='str'),
+            index_set_title=dict(type='str'),
             inverted=dict(type='bool', default=False),
             description=dict(type='str'),
             remove_matches_from_default_stream=dict(type='bool', default=False),

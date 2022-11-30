@@ -2,7 +2,7 @@
 Ansible modules for the [Graylog2/graylog2-server](https://github.com/graylog2/graylog2-server) API
 
 To properly use `module_utils` helpers you need to define env `ANSIBLE_MODULE_UTILS` or configuration
-option `DEFAULT_MODULE_UTILS_PATH` poiting to local module `module_utils directory.
+option `DEFAULT_MODULE_UTILS_PATH` poiting to local module `module_utils` directory.
 
 A full example playbook can be found in `main.yml`.
 

@@ -15,8 +15,8 @@ from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils.urls import fetch_url 
 from ansible.module_utils._text import to_text
 import sys, os, re, json, base64
-from ansible.module_utils.graylog_helpers import *
 
+from ansible.module_utils.graylog_helpers import *
 
 def get_stream_info_by_id(module, base_url, headers, stream_id):
     url = "{base_url}/api/streams/{id}".format(base_url=base_url, id=stream_id)
@@ -163,7 +163,6 @@ def default_index_set(module, base_url, headers):
         default_index_set_id = indices['index_sets'][0]['id']
 
     return default_index_set_id
-
 
 def main():
     module = AnsibleModule(

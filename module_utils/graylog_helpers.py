@@ -1,13 +1,16 @@
-
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
+from __future__ import (absolute_import, division, print_function)
+
+__metaclass__ = type
+
+__all__ = ["compare_dict", "get_token", "endpoint_normalize", "work_request"]
 
 from ansible.module_utils.urls import fetch_url 
 from ansible.module_utils._text import to_text
 import base64
 import json
-
 
 def compare_dict( dict_one, dict_two ):
   if dict_one.keys() != dict_two.keys():

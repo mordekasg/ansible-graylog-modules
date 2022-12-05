@@ -3,6 +3,7 @@
 # GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
 from __future__ import (absolute_import, division, print_function)
+
 __metaclass__ = type
 
 ANSIBLE_METADATA = {'metadata_version': '1.1',
@@ -49,7 +50,7 @@ options:
       - Action to take against index API.
     required: false
     default: list
-    choices: [ create, update, list, delete, query_index_sets ]
+    choices: [ create, update, list, delete, query ]
     type: str
   id:
     description:
@@ -64,11 +65,6 @@ options:
   description:
     description:
       - Description.
-    required: false
-    type: str
-  creation_date:
-    description:
-      - Index set creation date.
     required: false
     type: str
   index_prefix:
@@ -188,11 +184,6 @@ json:
           returned: success
           type: str
           sample: 'Graylog'
-      creation_date:
-          description: Index set creation date.
-          returned: success
-          type: str
-          sample: '2019-01-21T19:45:09.098Z'
       default:
           description: Whether or not it is the default index set.
           returned: success
@@ -280,20 +271,43 @@ url:
   sample: https://www.ansible.com/
 '''
 
-
 # import module snippets
 import json
-import datetime
-import base64
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils.urls import fetch_url, to_text
 
+from ansible.module_utils.graylog_helpers import *
 
-def create(module, base_url, headers, creation_date):
 
-    url = base_url
+def get_info_by_id(module, base_url, headers, id):
+    url = "{base_url}/api/system/indices/index_sets/{id}".format(base_url=base_url, id=id)
+    response, info = fetch_url(module=module, url=url, headers=json.loads(headers), method='GET')
+
+    try:
+        content = to_text(response.read(), errors='surrogate_or_strict')
+        data = json.loads(content)
+    except AttributeError:
+        content = info.pop('body', '')
+        data = {}
+
+    # raise Exception(data)
+    return data
+
+
+def create_or_update(module, base_url, headers):
+    id = query(module, base_url, headers, module.params['title'])
 
     payload = {}
+
+    # raise Exception(id)
+    if id == "":
+        httpMethod = "POST"
+        url = base_url + "/api/system/indices/index_sets"
+        data_pre = {}
+    else:
+        httpMethod = "PUT"
+        url = base_url + "/api/system/indices/index_sets/" + id
+        data_pre = get_info_by_id(module, base_url, headers, id)
 
     for key in ['title', 'description', 'index_prefix', 'field_type_refresh_interval', 'writable', 'default',
                 'index_analyzer', 'shards', 'replicas', 'rotation_strategy_class', 'retention_strategy_class',
@@ -302,9 +316,8 @@ def create(module, base_url, headers, creation_date):
         if module.params[key] is not None:
             payload[key] = module.params[key]
 
-    payload['creation_date'] = creation_date
-
-    response, info = fetch_url(module=module, url=url, headers=json.loads(headers), method='POST', data=module.jsonify(payload))
+    response, info = fetch_url(module=module, url=url, headers=json.loads(headers), method=httpMethod,
+                               data=module.jsonify(payload))
 
     if info['status'] != 200:
         module.fail_json(msg="Fail: %s" % ("Status: " + str(info['msg']) + ", Message: " + str(info['body'])))
@@ -314,38 +327,17 @@ def create(module, base_url, headers, creation_date):
     except AttributeError:
         content = info.pop('body', '')
 
-    return info['status'], info['msg'], content, url
+    data_post = get_info_by_id(module, base_url, headers, id)
 
+    return info['status'], info['msg'], content, url, not compare_dict(data_pre, data_post)
 
-def update(module, base_url, headers):
+def delete(module, base_url, headers):
+    id = query(module, base_url, headers, module.params['title'])
 
-    url = "/".join([base_url, module.params['id']])
+    if id == "":
+        return 0, "Already non-existent", "Nothing to do", base_url, False
 
-    payload = {}
-
-    for key in ['title', 'description', 'index_prefix', 'field_type_refresh_interval', 'writable', 'default',
-                'index_analyzer', 'shards', 'replicas', 'rotation_strategy_class', 'retention_strategy_class',
-                'rotation_strategy', 'retention_strategy', 'index_optimization_max_num_segments',
-                'index_optimization_disabled']:
-        if module.params[key] is not None:
-            payload[key] = module.params[key]
-
-    response, info = fetch_url(module=module, url=url, headers=json.loads(headers), method='PUT', data=module.jsonify(payload))
-
-    if info['status'] != 200:
-        module.fail_json(msg="Fail: %s" % ("Status: " + str(info['msg']) + ", Message: " + str(info['body'])))
-
-    try:
-        content = to_text(response.read(), errors='surrogate_or_strict')
-    except AttributeError:
-        content = info.pop('body', '')
-
-    return info['status'], info['msg'], content, url
-
-
-def delete(module, base_url, headers, id):
-
-    url = base_url + "/%s" % (id)
+    url = base_url + "/system/indices/index_sets/" + id
 
     response, info = fetch_url(module=module, url=url, headers=json.loads(headers), method='DELETE')
 
@@ -360,29 +352,8 @@ def delete(module, base_url, headers, id):
     return info['status'], info['msg'], content, url
 
 
-def list(module, base_url, headers, id):
-
-    if id is not None:
-        url = base_url + "/%s" % (id)
-    else:
-        url = base_url
-
-    response, info = fetch_url(module=module, url=url, headers=json.loads(headers), method='GET')
-
-    if info['status'] != 200:
-        module.fail_json(msg="Fail: %s" % ("Status: " + str(info['msg']) + ", Message: " + str(info['body'])))
-
-    try:
-        content = to_text(response.read(), errors='surrogate_or_strict')
-    except AttributeError:
-        content = info.pop('body', '')
-
-    return info['status'], info['msg'], content, url
-
-
-def query_index_sets(module, base_url, headers, title):
-
-    url = base_url
+def query(module, base_url, headers, title):
+    url = base_url + "/api/system/indices/index_sets"
 
     response, info = fetch_url(module=module, url=url, headers=json.loads(headers), method='GET')
 
@@ -397,7 +368,6 @@ def query_index_sets(module, base_url, headers, title):
 
     id = ""
     if index_sets is not None:
-
         i = 0
         while i < len(index_sets['index_sets']):
             index_set = index_sets['index_sets'][i]
@@ -409,36 +379,6 @@ def query_index_sets(module, base_url, headers, title):
     return id
 
 
-def get_token(module, endpoint, username, password):
-
-    headers = '{ "Content-Type": "application/json", "X-Requested-By": "Graylog API", "Accept": "application/json" }'
-
-    url = endpoint + "/api/system/sessions"
-
-    payload = {
-        'username': username,
-        'password': password,
-        'host': endpoint
-    }
-
-    response, info = fetch_url(module=module, url=url, headers=json.loads(headers), method='POST', data=module.jsonify(payload))
-
-    if info['status'] != 200:
-        module.fail_json(msg="Fail: %s" % ("Status: " + str(info['msg']) + ", Message: " + str(info['body'])))
-
-    try:
-        content = to_text(response.read(), errors='surrogate_or_strict')
-        session = json.loads(content)
-    except AttributeError:
-        content = info.pop('body', '')
-
-    session_string = session['session_id'] + ":session"
-    session_bytes = session_string.encode('utf-8')
-    session_token = base64.b64encode(session_bytes)
-
-    return session_token
-
-
 def main():
     module = AnsibleModule(
         argument_spec=dict(
@@ -447,11 +387,9 @@ def main():
             graylog_password=dict(type='str', no_log=True),
             allow_http=dict(type='bool', required=False, default=False),
             validate_certs=dict(type='bool', required=False, default=True),
-            action=dict(type='str', required=False, default='list', choices=['create', 'update', 'delete', 'list', 'query_index_sets']),
+            state=dict(type='str', required=False, default='present', choices=['present', "absent"]),
             title=dict(type='str'),
             description=dict(type='str'),
-            creation_date=dict(type='str', required=False),
-            id=dict(type='str'),
             index_prefix=dict(type='str'),
             index_analyzer=dict(type='str', default="standard"),
             shards=dict(type='int', default=4),
@@ -459,11 +397,14 @@ def main():
             field_type_refresh_interval=dict(type='int', default=5000),
             rotation_strategy_class=dict(type='str',
                                          default='org.graylog2.indexer.rotation.strategies.TimeBasedRotationStrategy'),
-            retention_strategy_class=dict(type='str', default='org.graylog2.indexer.retention.strategies.DeletionRetentionStrategy'),
-            rotation_strategy=dict(type='dict', default=dict(type='org.graylog2.indexer.rotation.strategies.TimeBasedRotationStrategyConfig',
-                                   rotation_period='P1D')),
-            retention_strategy=dict(type='dict', default=dict(type='org.graylog2.indexer.retention.strategies.DeletionRetentionStrategyConfig',
-                                    max_number_of_indices=14)),
+            retention_strategy_class=dict(type='str',
+                                          default='org.graylog2.indexer.retention.strategies.DeletionRetentionStrategy'),
+            rotation_strategy=dict(type='dict', default=dict(
+                type='org.graylog2.indexer.rotation.strategies.TimeBasedRotationStrategyConfig',
+                rotation_period='P1D')),
+            retention_strategy=dict(type='dict', default=dict(
+                type='org.graylog2.indexer.retention.strategies.DeletionRetentionStrategyConfig',
+                max_number_of_indices=14)),
             index_optimization_max_num_segments=dict(type='int', default=1),
             index_optimization_disabled=dict(type='bool', default=False),
             writable=dict(type='bool', default=True),
@@ -471,37 +412,21 @@ def main():
         )
     )
 
-    endpoint = module.params['endpoint']
     graylog_user = module.params['graylog_user']
     graylog_password = module.params['graylog_password']
-    action = module.params['action']
-    allow_http = module.params['allow_http']
-    title = module.params['title']
-    id = module.params['id']
-    creation_date = module.params['creation_date'] or datetime.datetime.utcnow().isoformat() + 'Z'
+    endpoint = endpoint_normalize(module.params['endpoint'], module.params['allow_http'])
 
-    if allow_http == True:
-      endpoint = "http://" + endpoint
-    else:
-      endpoint = "https://" + endpoint
+    state = module.params['state']
+    human_url = ""
 
-    base_url = endpoint + "/api/system/indices/index_sets"
+    headers = get_token(module, endpoint, graylog_user, graylog_password)
 
-    api_token = get_token(module, endpoint, graylog_user, graylog_password)
-    headers = '{ "Content-Type": "application/json", "X-Requested-By": "Graylog API", "Accept": "application/json", \
-                "Authorization": "Basic ' + api_token.decode() + '" }'
-
-    if action == "create":
-        status, message, content, url = create(module, base_url, headers, creation_date)
-    elif action == "update":
-        status, message, content, url = update(module, base_url, headers)
-    elif action == "delete":
-        status, message, content, url = delete(module, base_url, headers, id)
-    elif action == "list":
-        status, message, content, url = list(module, base_url, headers, id)
-    elif action == "query_index_sets":
-        id = query_index_sets(module, base_url, headers, title)
-        status, message, content, url = list(module, base_url, headers, id)
+    if state == "present":
+        status, message, content, url, is_changed = create_or_update(module, endpoint, headers)
+        human_url = endpoint + "/system/index_sets/" + query(module, endpoint, headers,
+                                                           module.params['title'])
+    elif state == "absent":
+        status, message, content, url, is_changed = delete(module, endpoint, headers)
 
     uresp = {}
     content = to_text(content, encoding='UTF-8')
@@ -515,6 +440,8 @@ def main():
     uresp['status'] = status
     uresp['msg'] = message
     uresp['url'] = url
+    uresp['human_url'] = human_url
+    uresp['changed'] = is_changed
 
     module.exit_json(**uresp)
 

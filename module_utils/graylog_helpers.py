@@ -54,7 +54,10 @@ def get_token(module, endpoint, username, password):
   session_bytes = session_string.encode('utf-8')
   session_token = base64.b64encode(session_bytes)
 
-  return session_token
+  headers = '{ "Content-Type": "application/json", "X-Requested-By": "Graylog API", "Accept": "application/json", \
+                "Authorization": "Basic ' + session_token.decode() + '" }'
+
+  return headers
 
 
 def endpoint_normalize(endpoint_adress, allow_http):

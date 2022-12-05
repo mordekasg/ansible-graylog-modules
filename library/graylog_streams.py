@@ -6,17 +6,17 @@
 
 from __future__ import (absolute_import, division, print_function)
 from re import I
+
 __metaclass__ = type
-
-
 
 # import module snippets
 from ansible.module_utils.basic import AnsibleModule
-from ansible.module_utils.urls import fetch_url 
+from ansible.module_utils.urls import fetch_url
 from ansible.module_utils._text import to_text
 import sys, os, re, json, base64
 
 from ansible.module_utils.graylog_helpers import *
+
 
 def get_stream_info_by_id(module, base_url, headers, stream_id):
     url = "{base_url}/api/streams/{id}".format(base_url=base_url, id=stream_id)
@@ -34,32 +34,31 @@ def get_stream_info_by_id(module, base_url, headers, stream_id):
 
 
 def create_or_update(module, base_url, headers):
-
     index_set_id = default_index_set(module, base_url, headers)
 
-    stream_id = query_streams(module, base_url, headers, module.params['title'])
-
-    # raise Exception(stream_id)
-    if stream_id == "":
-      httpMethod = "POST"
-      url = base_url + "/api/streams"
-      data_pre = {}
-    else:
-      httpMethod = "PUT"
-      url = base_url + "/api/streams/" + stream_id
-      data_pre = get_stream_info_by_id(module, base_url, headers, stream_id)
-
+    stream_id = query(module, base_url, headers, module.params['title'])
 
     payload = {}
 
+    # raise Exception(stream_id)
+    if stream_id == "":
+        httpMethod = "POST"
+        url = base_url + "/api/streams"
+        data_pre = {}
+    else:
+        httpMethod = "PUT"
+        url = base_url + "/api/streams/" + stream_id
+        data_pre = get_stream_info_by_id(module, base_url, headers, stream_id)
+
     for key in ['title', 'description', 'remove_matches_from_default_stream', 'matching_type', 'rules']:
-      if module.params[key] is not None and module.params[key] != "":
-        payload[key] = module.params[key]
+        if module.params[key] is not None and module.params[key] != "":
+            payload[key] = module.params[key]
 
     payload['index_set_id'] = index_set_id
 
     # raise Exception(payload)
-    response, info = fetch_url(module=module, url=url, headers=json.loads(headers), method=httpMethod, data=module.jsonify(payload))
+    response, info = fetch_url(module=module, url=url, headers=json.loads(headers), method=httpMethod,
+                               data=module.jsonify(payload))
 
     if info['status'] != 201 and info['status'] != 200 and info['status'] != 204:
         module.fail_json(msg="Fail: %s" % ("Status: " + str(info['msg']) + ", Message: " + str(info['body'])))
@@ -75,7 +74,7 @@ def create_or_update(module, base_url, headers):
 
 
 def delete(module, base_url, headers):
-    stream_id = query_streams(module, base_url, headers, module.params['title'])
+    stream_id = query(module, base_url, headers, module.params['title'])
 
     if stream_id == "":
         return 0, "Already non-existent", "Nothing to do", base_url, False
@@ -96,7 +95,7 @@ def delete(module, base_url, headers):
 
 
 def start(module, base_url, headers):
-    stream_id = query_streams(module, base_url, headers, module.params['title'])
+    stream_id = query(module, base_url, headers, module.params['title'])
 
     url = "{base_url}/api/streams/{id}/resume".format(base_url=base_url, id=stream_id)
 
@@ -114,8 +113,7 @@ def start(module, base_url, headers):
     return info['status'], info['msg'], content, url
 
 
-def query_streams(module, base_url, headers, stream_name):
-
+def query(module, base_url, headers, stream_name):
     url = base_url + "/api/streams"
 
     response, info = fetch_url(module=module, url=url, headers=json.loads(headers), method='GET')
@@ -131,7 +129,6 @@ def query_streams(module, base_url, headers, stream_name):
 
     stream_id = ""
     if streams is not None:
-
         i = 0
         while i < len(streams['streams']):
             stream = streams['streams'][i]
@@ -144,7 +141,6 @@ def query_streams(module, base_url, headers, stream_name):
 
 
 def default_index_set(module, base_url, headers):
-
     if module.params['index_set_id'] is not None:
         default_index_set_id = module.params['index_set_id']
         return default_index_set_id
@@ -174,6 +170,7 @@ def default_index_set(module, base_url, headers):
 
     return default_index_set_id
 
+
 def main():
     module = AnsibleModule(
         argument_spec=dict(
@@ -202,21 +199,18 @@ def main():
 
     graylog_user = module.params['graylog_user']
     graylog_password = module.params['graylog_password']
-    allow_http = module.params['allow_http']
-    endpoint = endpoint_normalize(module.params['endpoint'], allow_http)
-  
+    endpoint = endpoint_normalize(module.params['endpoint'], module.params['allow_http'])
 
     state = module.params['state']
     human_url = ""
 
-    api_token = get_token(module, endpoint, graylog_user, graylog_password)
-    headers = '{ "Content-Type": "application/json", "X-Requested-By": "Graylog API", "Accept": "application/json", \
-                "Authorization": "Basic ' + api_token.decode() + '" }'
+    headers = get_token(module, endpoint, graylog_user, graylog_password)
 
     if state == "present":
         status, message, content, url, is_changed = create_or_update(module, endpoint, headers)
         start(module, endpoint, headers)
-        human_url = endpoint + "/streams/" + query_streams(module, endpoint, headers, module.params['title']) + "/search"
+        human_url = endpoint + "/streams/" + query(module, endpoint, headers,
+                                                           module.params['title']) + "/search"
     elif state == "absent":
         status, message, content, url, is_changed = delete(module, endpoint, headers)
 
@@ -227,7 +221,7 @@ def main():
         js = json.loads(content)
     except ValueError:
         js = ""
-    
+
     uresp['json'] = js
     uresp['status'] = status
     uresp['msg'] = message

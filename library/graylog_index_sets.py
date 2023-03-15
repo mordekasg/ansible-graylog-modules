@@ -10,6 +10,8 @@ ANSIBLE_METADATA = {'metadata_version': '1.1',
                     'status': ['preview'],
                     'supported_by': 'community'}
 
+import datetime
+
 DOCUMENTATION = '''
 module: graylog_index_sets
 short_description: Communicate with the Graylog API to manage index sets
@@ -315,6 +317,9 @@ def create_or_update(module, base_url, headers):
                 'index_optimization_disabled']:
         if module.params[key] is not None:
             payload[key] = module.params[key]
+
+    if not 'creation_date' in payload:
+        payload['creation_date'] = datetime.datetime.utcnow().isoformat() + 'Z'
 
     response, info = fetch_url(module=module, url=url, headers=json.loads(headers), method=httpMethod,
                                data=module.jsonify(payload))

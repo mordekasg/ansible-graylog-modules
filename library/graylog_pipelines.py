@@ -364,6 +364,7 @@ def create_rule(module, rule_url, headers):
     response, info = fetch_url(module=module, url=url, headers=json.loads(headers), timeout=20, method='POST', data=module.jsonify(payload))
 
     if info['status'] != 200:
+    if info['status'] != 200:
         module.fail_json(msg="Fail: %s" % ("Status: " + str(info['msg']) + ", Message: " + str(info['body'])))
 
     try:
